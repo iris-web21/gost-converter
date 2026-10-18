@@ -1,0 +1,247 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ГОСТ-Конвертер: Текст → Word</title>
+<link rel="icon" href="data:,">
+<style>
+  * { box-sizing: border-box; }
+  body {
+    font-family: -apple-system, 'Segoe UI', Roboto, sans-serif;
+    max-width: 900px;
+    margin: 40px auto;
+    padding: 0 20px;
+    background: #f4f6f8;
+    color: #222;
+  }
+  h1 { text-align: center; margin-bottom: 6px; }
+  .subtitle { text-align: center; color: #666; margin-bottom: 30px; font-size: 15px; }
+  .card {
+    background: white;
+    border-radius: 12px;
+    padding: 28px;
+    box-shadow: 0 4px 20px rgba(0,0,0,0.06);
+  }
+  label { font-weight: 600; font-size: 14px; color: #444; }
+  textarea {
+    width: 100%;
+    height: 400px;
+    font-family: 'Times New Roman', serif;
+    font-size: 15px;
+    line-height: 1.6;
+    padding: 16px;
+    border: 1px solid #dde2e7;
+    border-radius: 8px;
+    resize: vertical;
+    margin-top: 8px;
+  }
+  textarea:focus { outline: none; border-color: #2c3e50; }
+  button {
+    margin-top: 18px;
+    width: 100%;
+    padding: 14px;
+    background: #2c3e50;
+    color: white;
+    border: none;
+    border-radius: 8px;
+    font-size: 16px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: background 0.2s;
+  }
+  button:hover:not(:disabled) { background: #1a252f; }
+  button:disabled { opacity: 0.6; cursor: not-allowed; }
+  .hint {
+    font-size: 13px;
+    color: #555;
+    margin-top: 12px;
+    padding: 12px;
+    background: #f0f4f8;
+    border-radius: 8px;
+    border-left: 3px solid #2c3e50;
+    line-height: 1.6;
+  }
+  .hint code { background: #e3e9ef; padding: 1px 5px; border-radius: 3px; font-size: 12px; }
+  .status {
+    margin-top: 14px;
+    padding: 12px;
+    border-radius: 8px;
+    font-size: 14px;
+    display: none;
+  }
+  .status.success { display: block; background: #e8f5e9; color: #2e7d32; }
+  .status.error   { display: block; background: #ffebee; color: #c62828; }
+  .status.loading { display: block; background: #fff8e1; color: #f57c00; }
+</style>
+</head>
+<body>
+  <h1>ГОСТ-Конвертер</h1>
+  <p class="subtitle">Вставьте текст — получите готовый .docx по ГОСТ 7.32-2017</p>
+
+  <div class="card">
+    <label for="sourceText">Ваш текст</label>
+    <textarea id="sourceText" placeholder="Вставьте текст сюда...
+
+Строки, начинающиеся с #, станут заголовками (по центру, жирным, капсом).
+Строки, начинающиеся с ##, станут подзаголовками (слева, жирным).
+
+Остальные строки — обычные абзацы с красной строкой 1.25 см."></textarea>
+
+    <button id="convertBtn">📥 Скачать .docx по ГОСТ</button>
+    <div id="status" class="status"></div>
+
+    <div class="hint">
+      <strong>Параметры ГОСТ 7.32-2017:</strong> Times New Roman 14pt ·
+      поля 30/15/20/20 мм · интервал 1.5 · отступ 1.25 см · нумерация внизу по центру.
+      <br>Всё выполняется в браузере — текст никуда не отправляется.
+    </div>
+  </div>
+
+  <!-- Библиотека docx как обычный скрипт (UMD) -->
+  <script src="https://unpkg.com/docx@8.5.0/build/index.umd.js"></script>
+  <script>
+    window.addEventListener('load', function () {
+      if (typeof docx === 'undefined') {
+        document.getElementById('status').className = 'status error';
+        document.getElementById('status').textContent =
+          'Не удалось загрузить библиотеку docx. Проверьте интернет и обновите страницу.';
+        return;
+      }
+
+      var Document = docx.Document;
+      var Packer = docx.Packer;
+      var Paragraph = docx.Paragraph;
+      var TextRun = docx.TextRun;
+      var AlignmentType = docx.AlignmentType;
+      var convertMillimetersToTwip = docx.convertMillimetersToTwip;
+      var Footer = docx.Footer;
+      var PageNumber = docx.PageNumber;
+
+      var btn = document.getElementById('convertBtn');
+      var statusEl = document.getElementById('status');
+
+      function setStatus(msg, type) {
+        statusEl.className = 'status ' + type;
+        statusEl.textContent = msg;
+      }
+
+      function buildParagraphs(text) {
+        var paragraphs = [];
+        var lines = text.split('\n');
+
+        for (var i = 0; i < lines.length; i++) {
+          var line = lines[i].trim();
+          if (!line) continue;
+
+          if (line.indexOf('# ') === 0) {
+            paragraphs.push(new Paragraph({
+              children: [new TextRun({
+                text: line.slice(2).toUpperCase(),
+                bold: true,
+                font: 'Times New Roman',
+                size: 28,
+              })],
+              alignment: AlignmentType.CENTER,
+              spacing: { before: 240, after: 240, line: 360 },
+            }));
+          } else if (line.indexOf('## ') === 0) {
+            paragraphs.push(new Paragraph({
+              children: [new TextRun({
+                text: line.slice(3),
+                bold: true,
+                font: 'Times New Roman',
+                size: 28,
+              })],
+              alignment: AlignmentType.LEFT,
+              spacing: { before: 240, after: 120, line: 360 },
+              indent: { firstLine: convertMillimetersToTwip(12.5) },
+            }));
+          } else {
+            paragraphs.push(new Paragraph({
+              children: [new TextRun({
+                text: line,
+                font: 'Times New Roman',
+                size: 28,
+              })],
+              alignment: AlignmentType.JUSTIFIED,
+              spacing: { line: 360 },
+              indent: { firstLine: convertMillimetersToTwip(12.5) },
+            }));
+          }
+        }
+
+        return paragraphs;
+      }
+
+      btn.addEventListener('click', async function () {
+        var text = document.getElementById('sourceText').value;
+        if (!text.trim()) {
+          setStatus('Введите текст перед конвертацией', 'error');
+          return;
+        }
+
+        btn.disabled = true;
+        setStatus('Генерирую документ...', 'loading');
+
+        try {
+          var children = buildParagraphs(text);
+
+          var doc = new Document({
+            styles: {
+              default: {
+                document: {
+                  run: { font: 'Times New Roman', size: 28 },
+                  paragraph: { spacing: { line: 360 } },
+                },
+              },
+            },
+            sections: [{
+              properties: {
+                page: {
+                  margin: {
+                    top:    convertMillimetersToTwip(20),
+                    right:  convertMillimetersToTwip(15),
+                    bottom: convertMillimetersToTwip(20),
+                    left:   convertMillimetersToTwip(30),
+                  },
+                },
+              },
+              footers: {
+                default: new Footer({
+                  children: [new Paragraph({
+                    alignment: AlignmentType.CENTER,
+                    children: [new TextRun({
+                      children: [PageNumber.CURRENT],
+                      font: 'Times New Roman',
+                      size: 28,
+                    })],
+                  })],
+                }),
+              },
+              children: children,
+            }],
+          });
+
+          var blob = await Packer.toBlob(doc);
+          var url = URL.createObjectURL(blob);
+          var a = document.createElement('a');
+          a.href = url;
+          a.download = 'gost_document.docx';
+          document.body.appendChild(a);
+          a.click();
+          a.remove();
+          URL.revokeObjectURL(url);
+
+          setStatus('✅ Готово! Файл gost_document.docx скачан.', 'success');
+        } catch (err) {
+          console.error(err);
+          setStatus('Ошибка: ' + err.message, 'error');
+        } finally {
+          btn.disabled = false;
+        }
+      });
+    });
+  </script>
+</body>
+</html>
